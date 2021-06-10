@@ -3,7 +3,8 @@ import './App.css';
 import distortionCurve from './distortionCurve';
 import Oscilloscope from './Oscilloscope';
 import FunctionGraph from './FunctionGraph';
-import {loadTremoloProcessor, TremoloNode} from './TremoloNode';
+import TremoloNode from './TremoloNode';
+import PlatverbNode from './PlatverbNode';
 
 const audioContext = new AudioContext();
 
@@ -22,21 +23,30 @@ function makeAudioGraph(audioElement) {
   const gain = audioContext.createGain();
   const distortion = makeDistortionNode();
   const tremolo = new TremoloNode(audioContext);
-  track.connect(gain);
-  gain.connect(distortion);
-  distortion.connect(tremolo);
+  const reverb = new PlatverbNode(audioContext);
 
-  tremolo.connect(audioContext.destination);
+  const nodes = [
+    track,
+    gain,
+    distortion,
+    tremolo,
+    reverb,
+    audioContext.destination,
+  ];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    nodes[i].connect(nodes[i + 1]);
+  }
 
   return {
     track,
     distortion,
     gain,
     tremolo,
+    reverb,
   };
 }
 
-function Slider({name, min, max, steps, value, onChange}) {
+function Slider({name, min, max, step, steps, value, onChange}) {
   return (
     <label>
       {name}
@@ -45,7 +55,7 @@ function Slider({name, min, max, steps, value, onChange}) {
         type="range"
         min={min}
         max={max}
-        step={(max - min) / steps}
+        step={step != null ? step : (max - min) / steps}
         value={value}
         onChange={useCallback(
           (e) => {
@@ -55,100 +65,62 @@ function Slider({name, min, max, steps, value, onChange}) {
         )}
       />
       <br />
-      <input value={value.toFixed(2)} readOnly />
+      <input
+        value={value.toFixed(2)}
+        onChange={useCallback(
+          (e) => {
+            onChange(
+              name,
+              Math.min(Math.max(parseFloat(e.currentTarget.value), min), max)
+            );
+          },
+          [onChange, name, max, min]
+        )}
+      />
     </label>
   );
 }
 
+const panelStyle = {margin: 8, padding: 8, border: 'solid 1px black'};
+
 function Rack({audioGraph}) {
   const [gainAmount, setGainAmount] = useState(4);
   const [distortionType, setDistortionType] = useState({
-    name: 'sigmoid',
-    curve: distortionCurve.sigmoid(),
+    name: 'linear',
+    curve: distortionCurve.linear(),
   });
-  useEffect(() => {
-    audioGraph.gain.gain.setValueAtTime(gainAmount, audioContext.currentTime);
-  }, []);
 
   const gainPanel = (
-    <div style={{margin: 8}}>
-      <label>
-        gain
-        <br />
-        <input
-          type="range"
-          min={0.1}
-          max={100}
-          step={0.1}
-          value={gainAmount}
-          onChange={(e) => {
-            const newGain = Math.max(0.1, parseFloat(e.currentTarget.value));
-            const gainNode = audioGraph.gain;
-            if (gainNode) {
-              gainNode.gain.linearRampToValueAtTime(
-                newGain,
-                audioContext.currentTime + 0.01
-              );
-            }
+    <div style={panelStyle}>
+      <Slider
+        name="gain"
+        min={0.1}
+        max={100}
+        step={0.1}
+        value={gainAmount}
+        onChange={(name, value) => {
+          const newGain = value;
+          const gainNode = audioGraph.gain;
+          if (gainNode) {
+            gainNode.gain.linearRampToValueAtTime(
+              newGain,
+              audioContext.currentTime + 0.01
+            );
+          }
 
-            setGainAmount(newGain);
-          }}
-        />
-        <br />
-        <input value={gainAmount} readOnly />
-      </label>
-    </div>
-  );
-  const tremoloNode = audioGraph.tremolo;
-  const [tremoloParams, setTremoloParams] = useState(
-    () =>
-      new Map(
-        Array.from(tremoloNode.parameters).map(([name, param]) => [
-          name,
-          param.value,
-        ])
-      )
-  );
-  const setTremoloParam = useCallback(
-    (name, value) => {
-      tremoloNode.parameters
-        .get(name)
-        .linearRampToValueAtTime(value, audioContext.currentTime + 0.01);
-      setTremoloParams((params) => {
-        const updated = new Map(params);
-        updated.set(name, value);
-        return updated;
-      });
-    },
-    [setTremoloParams, tremoloNode.parameters]
-  );
-
-  const tremoloPanel = (
-    <div style={{margin: 8}}>
-      tremolo
-      {Array.from(tremoloNode.parameters).map(([name, param]) => {
-        return (
-          <div key={name}>
-            <Slider
-              name={name}
-              min={param.minValue}
-              max={param.maxValue}
-              steps={100}
-              value={tremoloParams.get(name)}
-              onChange={setTremoloParam}
-            />
-          </div>
-        );
-      })}
+          setGainAmount(newGain);
+        }}
+      />
     </div>
   );
 
   const distortionPanel = (
-    <div style={{margin: 8}}>
+    <div style={panelStyle}>
       <label>
         distortion
         <br />
         <select
+          style={{margin: '8px 0'}}
           value={distortionType.name}
           onChange={(e) => {
             const newValue = e.currentTarget.value;
@@ -176,11 +148,105 @@ function Rack({audioGraph}) {
     </div>
   );
 
+  const tremoloNode = audioGraph.tremolo;
+  const [tremoloParams, setTremoloParams] = useState(
+    () =>
+      new Map(
+        Array.from(tremoloNode.parameters).map(([name, param]) => [
+          name,
+          param.value,
+        ])
+      )
+  );
+  const setTremoloParam = useCallback(
+    (name, value) => {
+      tremoloNode.parameters
+        .get(name)
+        .linearRampToValueAtTime(value, audioContext.currentTime + 0.01);
+      setTremoloParams((params) => {
+        const updated = new Map(params);
+        updated.set(name, value);
+        return updated;
+      });
+    },
+    [setTremoloParams, tremoloNode.parameters]
+  );
+
+  const tremoloPanel = (
+    <div style={panelStyle}>
+      tremolo
+      {Array.from(tremoloNode.parameters).map(([name, param]) => {
+        return (
+          <div key={name}>
+            <Slider
+              name={name}
+              min={param.minValue}
+              max={param.maxValue}
+              steps={100}
+              value={tremoloParams.get(name)}
+              onChange={setTremoloParam}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const reverbNode = audioGraph.reverb;
+  const [reverbParams, setReverbParams] = useState(
+    () =>
+      new Map(
+        Object.entries(PlatverbNode.getParamDefaults()).map(([name, value]) => [
+          name,
+          value,
+        ])
+      )
+  );
+  const setReverbParam = useCallback(
+    (name, value) => {
+      reverbNode.setNamedParam(name, value);
+      setReverbParams((params) => {
+        const updated = new Map(params);
+        updated.set(name, value);
+        return updated;
+      });
+    },
+    [setReverbParams, reverbNode]
+  );
+  const reverbPanel = (
+    <div style={panelStyle}>
+      reverb
+      <div className="Panel_columns">
+        {Object.keys(PlatverbNode.getParamDefaults()).map((name) => {
+          return (
+            <div key={name}>
+              <Slider
+                name={name}
+                min={0}
+                max={1}
+                steps={100}
+                value={reverbParams.get(name)}
+                onChange={setReverbParam}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  useEffect(() => {
+    audioGraph.gain.gain.setValueAtTime(gainAmount, audioContext.currentTime);
+    setReverbParam('Wet', 0);
+    setTremoloParam('depth', 0);
+  }, []);
+
   return (
     <div style={{display: 'flex'}}>
       {gainPanel}
       {distortionPanel}
       {tremoloPanel}
+      {reverbPanel}
     </div>
   );
 }
@@ -201,17 +267,29 @@ function App() {
 
   return (
     <div>
-      <input
-        type="file"
-        onChange={(e) => {
-          const file = e.currentTarget.files[0];
-          if (!file) return;
-          setFileURL(URL.createObjectURL(file));
-        }}
-      />
-      <audio controls autoPlay loop src={fileURL} ref={audioElRef} />
       {audioGraphRef.current && <Rack audioGraph={audioGraphRef.current} />}
-      <Oscilloscope audioContext={audioContext} source={oscilloscopeSource} />
+      <div style={{display: 'flex', flex: 1}}>
+        <Oscilloscope audioContext={audioContext} source={oscilloscopeSource} />
+        <div>
+          <audio
+            style={{display: 'block', padding: 8}}
+            controls
+            autoPlay
+            loop
+            src={fileURL}
+            ref={audioElRef}
+          />
+          <input
+            style={{display: 'block', padding: 8}}
+            type="file"
+            onChange={(e) => {
+              const file = e.currentTarget.files[0];
+              if (!file) return;
+              setFileURL(URL.createObjectURL(file));
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -222,7 +300,10 @@ function StartPage() {
   const [modulesReady, setModulesReady] = useState(false);
 
   useEffect(() => {
-    loadTremoloProcessor(audioContext).then(() => {
+    Promise.all([
+      PlatverbNode.load(audioContext),
+      TremoloNode.load(audioContext),
+    ]).then(() => {
       setModulesReady(true);
     });
   }, []);

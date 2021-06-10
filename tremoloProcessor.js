@@ -9,12 +9,6 @@ class TremoloProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       {
-        name: 'enabled',
-        defaultValue: 1,
-        maxValue: 1,
-        minValue: 0,
-      },
-      {
         name: 'rate',
         defaultValue: 30, // hz
         maxValue: 100,
@@ -35,10 +29,6 @@ class TremoloProcessor extends AudioWorkletProcessor {
     // audio processing code here.
     for (let ch = 0; ch < firstInput.length; ch++) {
       for (let sample = 0; sample < firstInput[ch].length; sample++) {
-        const enabled =
-          parameters.enabled.length === 1
-            ? parameters.enabled[0]
-            : parameters.enabled[sample];
         const rate =
           parameters.rate.length === 1
             ? parameters.rate[0]
@@ -48,16 +38,13 @@ class TremoloProcessor extends AudioWorkletProcessor {
             ? parameters.depth[0]
             : parameters.depth[sample];
         const t = currentFrame + sample;
-        if (enabled) {
-          firstOutput[ch][sample] = tremolo(
-            firstInput[ch][sample],
-            t,
-            rate,
-            depth
-          );
-        } else {
-          firstOutput[ch][sample] = firstInput[ch][sample];
-        }
+
+        firstOutput[ch][sample] = tremolo(
+          firstInput[ch][sample],
+          t,
+          rate,
+          depth
+        );
       }
     }
     return true;

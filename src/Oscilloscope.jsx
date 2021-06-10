@@ -53,5 +53,5 @@ export default function Oscilloscope({audioContext, source}) {
       cancelAnimationFrame(animFrame);
     };
   }, [audioContext, source]);
-  return <canvas width={800} height={600} ref={canvasRef} />;
+  return <canvas width={800} height={400} ref={canvasRef} />;
 }

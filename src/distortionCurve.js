@@ -110,12 +110,12 @@ function makeDistortionCurveHardClip() {
 }
 
 export default {
-  sigmoid: makeDistortionCurveSigmoid,
-  cubic: makeDistortionCurveCubic,
-  sine: makeDistortionCurveSine,
-  sinefold: makeDistortionCurveSineFold,
   linear: makeDistortionCurveLinear,
+  sine: makeDistortionCurveSine,
+  cubic: makeDistortionCurveCubic,
+  sigmoid: makeDistortionCurveSigmoid,
+  sinefold: makeDistortionCurveSineFold,
+  hardclip: makeDistortionCurveHardClip,
   rectify: makeDistortionCurveRectifyFull,
   halfrectify: makeDistortionCurveRectifyHalf,
-  hardclip: makeDistortionCurveHardClip,
 };
