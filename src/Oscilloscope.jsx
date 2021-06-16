@@ -63,6 +63,7 @@ export default function Oscilloscope({audioContext, source}) {
       width={800}
       height={400}
       ref={canvasRef}
+      style={{cursor: 'pointer'}}
       onClick={() => {
         frameSkipRef.current = frameSkipRef.current === 4 ? 0 : 4;
       }}

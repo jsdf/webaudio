@@ -10,10 +10,10 @@ import useLocalStorage from './useLocalStorage';
 import VUMeter from './VUMeter';
 import {tremolo} from './tremolo';
 
-const demoNumber = parseInt(
-  new URLSearchParams(window.location.search).get('d')
-);
-console.log({demoNumber});
+let demoNumber = parseInt(new URLSearchParams(window.location.search).get('d'));
+if (isNaN(demoNumber)) {
+  demoNumber = 4;
+}
 
 const audioContext = new AudioContext();
 
@@ -21,7 +21,6 @@ function makeDistortionNode() {
   const distortion = audioContext.createWaveShaper();
 
   distortion.curve = distortionCurve.sigmoid();
-  console.log(distortion.curve);
 
   distortion.oversample = '4x';
   return distortion;
@@ -31,11 +30,11 @@ function makeAudioGraph(audioElement) {
   const track = audioContext.createMediaElementSource(audioElement);
   const pregain = audioContext.createGain();
   const distortion =
-    demoNumber != 1 || demoNumber > 3 ? null : makeDistortionNode();
+    demoNumber != 1 && demoNumber < 4 ? null : makeDistortionNode();
   const tremolo =
-    demoNumber != 2 || demoNumber > 3 ? null : new TremoloNode(audioContext);
+    demoNumber != 2 && demoNumber < 4 ? null : new TremoloNode(audioContext);
   const reverb =
-    demoNumber != 3 || demoNumber > 3 ? null : new PlatverbNode(audioContext);
+    demoNumber != 3 && demoNumber < 4 ? null : new PlatverbNode(audioContext);
   const postgain = audioContext.createGain();
 
   const nodes = [
@@ -220,7 +219,7 @@ function GainPanel({name, initialValue, gainNode, min, max, step, persists}) {
 
   return (
     <Slider
-      name="gain"
+      name={name}
       {...{min, max, step}}
       value={gainAmount}
       onChange={(name, value) => {
@@ -291,7 +290,7 @@ function Rack({audioGraph}) {
   const pregainPanel = (
     <div style={panelStyle}>
       <GainPanel
-        name="pregain"
+        name="input gain"
         initialValue={demoNumber === 3 ? 1 : 4}
         min={0.1}
         max={20}
@@ -320,7 +319,7 @@ function Rack({audioGraph}) {
   const postgainPanel = (
     <div style={panelStyle}>
       <GainPanel
-        name="postgain"
+        name="output gain"
         initialValue={1}
         min={0.01}
         max={1.2}
@@ -332,7 +331,7 @@ function Rack({audioGraph}) {
         <VUMeter
           audioContext={audioContext}
           source={audioGraph.postgain}
-          scale={2}
+          scale={1}
         />
       </div>
     </div>
@@ -359,7 +358,12 @@ function App() {
     if (audioElRef.current && !audioGraphRef.current) {
       audioGraphRef.current = makeAudioGraph(audioElRef.current);
 
-      setOscilloscopeSource(audioGraphRef.current.postgain);
+      setOscilloscopeSource(
+        audioGraphRef.current.reverb ||
+          audioGraphRef.current.tremolo ||
+          audioGraphRef.current.distortion ||
+          audioGraphRef.current.postgain
+      );
     }
   }, []);
 

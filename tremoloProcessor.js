@@ -37,6 +37,7 @@ class TremoloProcessor extends AudioWorkletProcessor {
           parameters.depth.length === 1
             ? parameters.depth[0]
             : parameters.depth[sample];
+
         const t = currentFrame + sample;
 
         firstOutput[ch][sample] = tremolo(
