@@ -10,8 +10,8 @@ class TremoloProcessor extends AudioWorkletProcessor {
     return [
       {
         name: 'rate',
-        defaultValue: 30, // hz
-        maxValue: 100,
+        defaultValue: 3, // hz
+        maxValue: 10,
         minValue: 0,
       },
       {
@@ -60,9 +60,11 @@ function remap(a, b, x, c, d) {
 }
 
 function tremolo(value, t, rate, depth) {
-  const periodInSamples = sampleRate * (1 / rate);
+  const period = sampleRate * (1 / rate);
 
-  return value * remap(-1, 1, Math.sin(t / periodInSamples), 1 - depth, 1);
+  return (
+    value * remap(-1, 1, Math.sin((t / period) * Math.PI * 2), 1 - depth, 1)
+  );
 }
 
 registerProcessor('tremolo-processor', TremoloProcessor);

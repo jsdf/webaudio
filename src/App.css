@@ -28,10 +28,10 @@
   color: #61dafb;
 }
 
-.Panel_columns {
+.ReverbPanel_columns {
   display: grid;
   grid-gap: 10px;
-  grid-template-columns: repeat(4, 150px);
+  grid-template-columns: repeat(3, 150px);
   grid-template-rows: repeat(4, 70px);
   grid-auto-flow: column;
 }
@@ -47,4 +47,8 @@
 
 button {
   font-size: calc(10px + 2vmin);
+}
+
+body {
+  background-color: #eee;
 }

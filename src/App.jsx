@@ -1,10 +1,19 @@
-import React, {useState, useRef, useEffect, useCallback} from 'react';
+import React, {useState, useMemo, useRef, useEffect, useCallback} from 'react';
 import './App.css';
 import distortionCurve from './distortionCurve';
 import Oscilloscope from './Oscilloscope';
 import FunctionGraph from './FunctionGraph';
 import TremoloNode from './TremoloNode';
 import PlatverbNode from './PlatverbNode';
+import demoSound from '../audio/z.wav';
+import useLocalStorage from './useLocalStorage';
+import VUMeter from './VUMeter';
+import {tremolo} from './tremolo';
+
+const demoNumber = parseInt(
+  new URLSearchParams(window.location.search).get('d')
+);
+console.log({demoNumber});
 
 const audioContext = new AudioContext();
 
@@ -20,29 +29,35 @@ function makeDistortionNode() {
 
 function makeAudioGraph(audioElement) {
   const track = audioContext.createMediaElementSource(audioElement);
-  const gain = audioContext.createGain();
-  const distortion = makeDistortionNode();
-  const tremolo = new TremoloNode(audioContext);
-  const reverb = new PlatverbNode(audioContext);
+  const pregain = audioContext.createGain();
+  const distortion =
+    demoNumber != 1 || demoNumber > 3 ? null : makeDistortionNode();
+  const tremolo =
+    demoNumber != 2 || demoNumber > 3 ? null : new TremoloNode(audioContext);
+  const reverb =
+    demoNumber != 3 || demoNumber > 3 ? null : new PlatverbNode(audioContext);
+  const postgain = audioContext.createGain();
 
   const nodes = [
     track,
-    gain,
+    pregain,
     distortion,
     tremolo,
     reverb,
+    postgain,
     audioContext.destination,
-  ];
+  ].filter(Boolean);
   for (let i = 0; i < nodes.length - 1; i++) {
     nodes[i].connect(nodes[i + 1]);
   }
 
   return {
     track,
+    pregain,
     distortion,
-    gain,
     tremolo,
     reverb,
+    postgain,
   };
 }
 
@@ -83,72 +98,7 @@ function Slider({name, min, max, step, steps, value, onChange}) {
 
 const panelStyle = {margin: 8, padding: 8, border: 'solid 1px black'};
 
-function Rack({audioGraph}) {
-  const [gainAmount, setGainAmount] = useState(4);
-  const [distortionType, setDistortionType] = useState({
-    name: 'linear',
-    curve: distortionCurve.linear(),
-  });
-
-  const gainPanel = (
-    <div style={panelStyle}>
-      <Slider
-        name="gain"
-        min={0.1}
-        max={100}
-        step={0.1}
-        value={gainAmount}
-        onChange={(name, value) => {
-          const newGain = value;
-          const gainNode = audioGraph.gain;
-          if (gainNode) {
-            gainNode.gain.linearRampToValueAtTime(
-              newGain,
-              audioContext.currentTime + 0.01
-            );
-          }
-
-          setGainAmount(newGain);
-        }}
-      />
-    </div>
-  );
-
-  const distortionPanel = (
-    <div style={panelStyle}>
-      <label>
-        distortion
-        <br />
-        <select
-          style={{margin: '8px 0'}}
-          value={distortionType.name}
-          onChange={(e) => {
-            const newValue = e.currentTarget.value;
-            const distortionNode = audioGraph.distortion;
-            if (distortionNode) {
-              distortionNode.curve = distortionCurve[newValue]();
-            }
-
-            setDistortionType({
-              name: newValue,
-              curve: distortionNode.curve,
-            });
-          }}
-        >
-          {Object.keys(distortionCurve).map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </label>{' '}
-      <div>
-        <FunctionGraph width={200} height={100} data={distortionType.curve} />
-      </div>
-    </div>
-  );
-
-  const tremoloNode = audioGraph.tremolo;
+function TremoloPanel({tremoloNode}) {
   const [tremoloParams, setTremoloParams] = useState(
     () =>
       new Map(
@@ -172,7 +122,31 @@ function Rack({audioGraph}) {
     [setTremoloParams, tremoloNode.parameters]
   );
 
-  const tremoloPanel = (
+  const tremoloGraph = useMemo(() => {
+    const data = [];
+    const samples = 200;
+
+    for (let i = 0; i < samples; i++) {
+      data.push(
+        tremolo(
+          1,
+          i,
+          tremoloParams.get('rate'),
+          tremoloParams.get('depth'),
+          samples
+        ) *
+          2 -
+          1
+      );
+    }
+    return data;
+  }, [tremoloParams]);
+
+  useEffect(() => {
+    setTremoloParam('depth', 0);
+  }, []);
+
+  return (
     <div style={panelStyle}>
       tremolo
       {Array.from(tremoloNode.parameters).map(([name, param]) => {
@@ -182,17 +156,89 @@ function Rack({audioGraph}) {
               name={name}
               min={param.minValue}
               max={param.maxValue}
-              steps={100}
+              steps={200}
               value={tremoloParams.get(name)}
               onChange={setTremoloParam}
             />
           </div>
         );
       })}
+      <div style={{padding: '8px 0'}}>
+        <FunctionGraph width={200} height={100} data={tremoloGraph} />
+      </div>
     </div>
   );
+}
 
-  const reverbNode = audioGraph.reverb;
+function DistortionPanel({distortionNode}) {
+  const [distortionType, setDistortionType] = useState({
+    name: 'linear',
+    curve: distortionCurve.linear(),
+  });
+  return (
+    <div style={panelStyle}>
+      <label>
+        distortion
+        <br />
+        <select
+          style={{margin: '8px 0'}}
+          value={distortionType.name}
+          onChange={(e) => {
+            const newValue = e.currentTarget.value;
+            if (distortionNode) {
+              distortionNode.curve = distortionCurve[newValue]();
+            }
+
+            setDistortionType({
+              name: newValue,
+              curve: distortionNode.curve,
+            });
+          }}
+        >
+          {Object.keys(distortionCurve).map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div>
+        <FunctionGraph width={200} height={100} data={distortionType.curve} />
+      </div>
+    </div>
+  );
+}
+
+function GainPanel({name, initialValue, gainNode, min, max, step, persists}) {
+  const [gainAmount, setGainAmount] = persists
+    ? useLocalStorage(name, initialValue)
+    : useState(initialValue);
+
+  useEffect(() => {
+    gainNode.gain.setValueAtTime(gainAmount, audioContext.currentTime);
+  }, []);
+
+  return (
+    <Slider
+      name="gain"
+      {...{min, max, step}}
+      value={gainAmount}
+      onChange={(name, value) => {
+        const newGain = value;
+        if (gainNode) {
+          gainNode.gain.linearRampToValueAtTime(
+            newGain,
+            audioContext.currentTime + 0.01
+          );
+        }
+
+        setGainAmount(newGain);
+      }}
+    />
+  );
+}
+
+function ReverbPanel({reverbNode}) {
   const [reverbParams, setReverbParams] = useState(
     () =>
       new Map(
@@ -213,10 +259,15 @@ function Rack({audioGraph}) {
     },
     [setReverbParams, reverbNode]
   );
-  const reverbPanel = (
+
+  useEffect(() => {
+    setReverbParam('Wet', 0);
+  }, []);
+
+  return (
     <div style={panelStyle}>
       reverb
-      <div className="Panel_columns">
+      <div className="ReverbPanel_columns">
         {Object.keys(PlatverbNode.getParamDefaults()).map((name) => {
           return (
             <div key={name}>
@@ -234,25 +285,72 @@ function Rack({audioGraph}) {
       </div>
     </div>
   );
+}
 
-  useEffect(() => {
-    audioGraph.gain.gain.setValueAtTime(gainAmount, audioContext.currentTime);
-    setReverbParam('Wet', 0);
-    setTremoloParam('depth', 0);
-  }, []);
+function Rack({audioGraph}) {
+  const pregainPanel = (
+    <div style={panelStyle}>
+      <GainPanel
+        name="pregain"
+        initialValue={demoNumber === 3 ? 1 : 4}
+        min={0.1}
+        max={20}
+        step={0.01}
+        gainNode={audioGraph.pregain}
+        persists={false}
+      />
+    </div>
+  );
+
+  const distortionPanel =
+    audioGraph.distortion == null ? null : (
+      <DistortionPanel distortionNode={audioGraph.distortion} />
+    );
+
+  const tremoloPanel =
+    audioGraph.tremolo == null ? null : (
+      <TremoloPanel tremoloNode={audioGraph.tremolo} />
+    );
+
+  const reverbPanel =
+    audioGraph.reverb == null ? null : (
+      <ReverbPanel reverbNode={audioGraph.reverb} />
+    );
+
+  const postgainPanel = (
+    <div style={panelStyle}>
+      <GainPanel
+        name="postgain"
+        initialValue={1}
+        min={0.01}
+        max={1.2}
+        step={0.01}
+        gainNode={audioGraph.postgain}
+        persists={true}
+      />
+      <div style={{margin: '8px 0'}}>
+        <VUMeter
+          audioContext={audioContext}
+          source={audioGraph.postgain}
+          scale={2}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div style={{display: 'flex'}}>
-      {gainPanel}
+      {pregainPanel}
       {distortionPanel}
       {tremoloPanel}
       {reverbPanel}
+      {postgainPanel}
     </div>
   );
 }
 
 function App() {
-  const [fileURL, setFileURL] = useState('/audio/z.wav');
+  const [fileURL, setFileURL] = useState(demoSound);
   const audioElRef = useRef(null);
   const audioGraphRef = useRef(null);
   const [oscilloscopeSource, setOscilloscopeSource] = useState(null);
@@ -261,16 +359,21 @@ function App() {
     if (audioElRef.current && !audioGraphRef.current) {
       audioGraphRef.current = makeAudioGraph(audioElRef.current);
 
-      setOscilloscopeSource(audioGraphRef.current.tremolo);
+      setOscilloscopeSource(audioGraphRef.current.postgain);
     }
   }, []);
 
   return (
     <div>
-      {audioGraphRef.current && <Rack audioGraph={audioGraphRef.current} />}
       <div style={{display: 'flex', flex: 1}}>
-        <Oscilloscope audioContext={audioContext} source={oscilloscopeSource} />
-        <div>
+        <div style={{padding: '8px 8px 4px 8px'}}>
+          <Oscilloscope
+            audioContext={audioContext}
+            source={oscilloscopeSource}
+          />
+        </div>
+        <div style={panelStyle}>
+          input
           <audio
             style={{display: 'block', padding: 8}}
             controls
@@ -290,6 +393,7 @@ function App() {
           />
         </div>
       </div>
+      {audioGraphRef.current && <Rack audioGraph={audioGraphRef.current} />}
     </div>
   );
 }
