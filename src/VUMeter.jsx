@@ -61,6 +61,6 @@ export default function VUMeter({audioContext, source, scale}) {
     return () => {
       cancelAnimationFrame(animFrame);
     };
-  }, [audioContext, source]);
+  }, [audioContext, source, scale]);
   return <canvas width={40} height={230} ref={canvasRef} />;
 }
