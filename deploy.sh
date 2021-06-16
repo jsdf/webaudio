@@ -16,6 +16,6 @@ git commit -m 'deploy'
 
 echo "deploying"
 # if you are deploying to https://<USERNAME>.github.io/<REPO>
-git push git@github.com:jsdf/webaudio-prod.git main
+git push
 
-cd -
+
